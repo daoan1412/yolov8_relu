@@ -24,6 +24,9 @@ class Detect(nn.Module):
     shape = None
     anchors = torch.empty(0)  # init
     strides = torch.empty(0)  # init
+    conv1x1 = nn.Conv2d(16, 1, 1, bias=False).requires_grad_(False)
+    aaa = torch.arange(16, dtype=torch.float)
+    conv1x1.weight.data[:] = nn.Parameter(aaa.view(1, 16, 1, 1))
 
     def __init__(self, nc=80, ch=()):
         """Initializes the YOLOv8 detection layer with specified number of classes and channels."""
@@ -38,10 +41,6 @@ class Detect(nn.Module):
             nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in ch)
         self.cv3 = nn.ModuleList(nn.Sequential(Conv(x, c3, 3), Conv(c3, c3, 3), nn.Conv2d(c3, self.nc, 1)) for x in ch)
         self.dfl = DFL(self.reg_max) if self.reg_max > 1 else nn.Identity()
-        if self.export and self.format in ('onnx'):
-            conv1x1 = nn.Conv2d(16, 1, 1, bias=False).requires_grad_(False)
-            aaa = torch.arange(16, dtype=torch.float)
-            conv1x1.weight.data[:] = nn.Parameter(aaa.view(1, 16, 1, 1))
 
     def forward(self, x):
         """Concatenates and returns predicted bounding boxes and class probabilities."""
