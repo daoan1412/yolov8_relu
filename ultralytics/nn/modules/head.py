@@ -38,10 +38,23 @@ class Detect(nn.Module):
             nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in ch)
         self.cv3 = nn.ModuleList(nn.Sequential(Conv(x, c3, 3), Conv(c3, c3, 3), nn.Conv2d(c3, self.nc, 1)) for x in ch)
         self.dfl = DFL(self.reg_max) if self.reg_max > 1 else nn.Identity()
+        if self.export and self.format in ('onnx'):
+            conv1x1 = nn.Conv2d(16, 1, 1, bias=False).requires_grad_(False)
+            aaa = torch.arange(16, dtype=torch.float)
+            conv1x1.weight.data[:] = nn.Parameter(aaa.view(1, 16, 1, 1))
 
     def forward(self, x):
         """Concatenates and returns predicted bounding boxes and class probabilities."""
         shape = x[0].shape  # BCHW
+        if self.export and self.format in ('onnx'):
+            y = []
+            for i in range(self.nl):
+                t1 = self.cv2[i](x[i])
+                t2 = self.cv3[i](x[i])
+                y.append(self.conv1x1(t1.view(t1.shape[0], 4, 16, -1).transpose(2, 1).softmax(1)))
+                y.append(t2)
+            return y
+
         for i in range(self.nl):
             x[i] = torch.cat((self.cv2[i](x[i]), self.cv3[i](x[i])), 1)
         if self.training:
@@ -123,6 +136,12 @@ class Pose(Detect):
         """Perform forward pass through YOLO model and return predictions."""
         bs = x[0].shape[0]  # batch size
         kpt = torch.cat([self.cv4[i](x[i]).view(bs, self.nk, -1) for i in range(self.nl)], -1)  # (bs, 17*3, h*w)
+        if self.export and self.format in ('onnx'):
+            ps = []
+            for i in range(self.nl):
+                ps.append(self.cv4[i](x[i]))
+            x = self.detect(self, x)
+            return x, ps
         x = self.detect(self, x)
         if self.training:
             return x, kpt
